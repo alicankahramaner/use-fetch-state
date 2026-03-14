@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type UseFetchStateProps<Req, Res> = {
     fetcher: (request: Req) => Promise<Res | false>,
@@ -9,50 +9,72 @@ export type UseFetchStateProps<Req, Res> = {
 }
 
 export const useFetchState = function <Request, Response>(options: UseFetchStateProps<Request, Response>) {
+    const isMounted = useRef(true);
+    const fetchCountRef = useRef(0);
+    const optionsRef = useRef(options);
+
+    // update options ref on change
+    useEffect(() => {
+        optionsRef.current = options;
+    }, [options]);
 
     const [request, setRequest] = useState(options.initialRequest);
     const [response, setResponse] = useState(options.initialResponse);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!options.waitCallback);
     const [error, setError] = useState<Error | null>(null);
 
+    // Unmount condition
+    useEffect(() => {
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
+    }, []);
+
     const fetchData = useCallback(async () => {
+
+        const fetchCount = ++fetchCountRef.current;
+
         setError(null);
-        setLoading(true)
+        setLoading(true);
+
         try {
-            const response = await options.fetcher(request)
+            const result = await optionsRef.current.fetcher(request);
 
-            if (response === false) {
-                setError(new Error("Fetch failed"));
-            } else {
-                setResponse(response);
+            // continue if fetchCount is same as refetch count and component is mounted
+            if (isMounted.current && fetchCount === fetchCountRef.current) {
+                if (result === false) {
+                    setError(new Error("Fetch failed"));
+                } else {
+                    setResponse(result);
+                }
             }
-
         } catch (err) {
-            setError(err as Error);
+            if (isMounted.current && fetchCount === fetchCountRef.current) {
+                setError(err as Error);
+            }
         } finally {
-            setLoading(false);
+            if (isMounted.current && fetchCount === fetchCountRef.current) {
+                setLoading(false);
+            }
         }
-    }, [setLoading, setError, setResponse, options, request]);
+    }, [request]);
 
     useEffect(() => {
         if (!options.reFetchChangeRequest) return;
         fetchData();
-    }, [request, fetchData]);
+    }, [request, options.reFetchChangeRequest, fetchData]);
 
     const clear = useCallback(() => {
         setError(null);
         setLoading(false);
-        setRequest(options.initialRequest);
-        setResponse(options.initialResponse);
-    }, [setError, setLoading, setRequest, setResponse, options]);
+        setRequest(optionsRef.current.initialRequest);
+        setResponse(optionsRef.current.initialResponse);
+    }, []);
 
     useEffect(() => {
         if (!options.waitCallback) {
             fetchData();
         }
-        return () => {
-            clear();
-        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return {

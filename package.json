@@ -1,6 +1,6 @@
 {
   "name": "use-fetch-state",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A lightweight React hook for managing async fetch state (data, loading, error) with automatic refetching.",
   "keywords": [
     "react",
